@@ -2,6 +2,7 @@
 
 import type React from "react"
 import { useState } from "react"
+import { useForm } from "react-hook-form"
 import { Button } from "./ui/button"
 import { Input } from "./ui/input"
 import { Label } from "./ui/label"
@@ -9,6 +10,7 @@ import { Textarea } from "./ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select"
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card"
 import { AlertCircle, Send, User, Target } from "lucide-react"
+import { apiService } from "@/lib/api"
 
 interface FormData {
   senderUrl: string
@@ -18,10 +20,10 @@ interface FormData {
   writingStyle: string
 }
 
-interface FormErrors {
-  senderUrl?: string
-  receiverUrl?: string
-  proposal?: string
+interface ApiResponse {
+  message: string
+  id: string
+  createdAt: string
 }
 
 const writingStyles = [
@@ -33,83 +35,50 @@ const writingStyles = [
 ]
 
 export default function IcebreakerForm() {
-  const [formData, setFormData] = useState<FormData>({
-    senderUrl: "",
-    receiverUrl: "",
-    problem: "",
-    proposal: "",
-    writingStyle: "",
+  const [isLoading, setIsLoading] = useState(false)
+  const [submitMessage, setSubmitMessage] = useState<string | null>(null)
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    watch,
+    setValue,
+    reset
+  } = useForm<FormData>({
+    defaultValues: {
+      senderUrl: "",
+      receiverUrl: "",
+      problem: "",
+      proposal: "",
+      writingStyle: "",
+    }
   })
 
-  const [errors, setErrors] = useState<FormErrors>({})
-  const [isLoading, setIsLoading] = useState(false)
-
-  const validateLinkedInUrl = (url: string): boolean => {
+  const validateLinkedInUrl = (url: string): boolean | string => {
+    if (!url.trim()) return "LinkedIn URL is required"
     const linkedinRegex = /^https:\/\/(www\.)?linkedin\.com\/in\/[a-zA-Z0-9-]+\/?$/
-    return linkedinRegex.test(url)
+    return linkedinRegex.test(url) || "Please enter a valid LinkedIn profile URL (e.g., https://linkedin.com/in/username)"
   }
 
-  const validateForm = (): boolean => {
-    const newErrors: FormErrors = {}
-
-    // Validate sender URL
-    if (!formData.senderUrl.trim()) {
-      newErrors.senderUrl = "Sender LinkedIn URL is required"
-    } else if (!validateLinkedInUrl(formData.senderUrl)) {
-      newErrors.senderUrl = "Please enter a valid LinkedIn profile URL (e.g., https://linkedin.com/in/username)"
-    }
-
-    // Validate receiver URL
-    if (!formData.receiverUrl.trim()) {
-      newErrors.receiverUrl = "Receiver LinkedIn URL is required"
-    } else if (!validateLinkedInUrl(formData.receiverUrl)) {
-      newErrors.receiverUrl = "Please enter a valid LinkedIn profile URL (e.g., https://linkedin.com/in/username)"
-    }
-
-    // Validate proposal
-    if (!formData.proposal.trim()) {
-      newErrors.proposal = "Proposal, solution, or objective is required"
-    } else if (formData.proposal.trim().length < 10) {
-      newErrors.proposal = "Please provide a more detailed proposal (at least 10 characters)"
-    }
-
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
-  }
-
-  const handleInputChange = (field: keyof FormData, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }))
-    // Clear error when user starts typing
-    if (errors[field as keyof FormErrors]) {
-      setErrors((prev) => ({ ...prev, [field]: undefined }))
-    }
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-
-    if (!validateForm()) {
-      return
-    }
-
+  const onSubmit = async (data: FormData) => {
     setIsLoading(true)
+    setSubmitMessage(null)
 
     try {
-      // TODO: Replace with actual API call
-      console.log("Form data:", formData)
-
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 2000))
-
-      // Handle success (you can add success state/notification here)
-      alert("Icebreaker message generated successfully!")
+      const result = await apiService.generateIcebreaker(data)
+      setSubmitMessage('Icebreaker message generated successfully!')
+      console.log('Generated icebreaker:', result)
     } catch (error) {
-      console.error("Error generating icebreaker:", error)
-      alert("Failed to generate icebreaker message. Please try again.")
+      console.error('Error generating icebreaker:', error)
+      setSubmitMessage(error instanceof Error ? error.message : 'Failed to generate icebreaker message. Please try again.')
     } finally {
       setIsLoading(false)
     }
   }
+
+  // Watch the writing style value for the Select component
+  const writingStyleValue = watch("writingStyle")
 
   return (
     <Card className="bg-white border-slate-200 shadow-lg rounded-xl">
@@ -120,7 +89,7 @@ export default function IcebreakerForm() {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           {/* LinkedIn URLs Section */}
           <div className="grid md:grid-cols-2 gap-6">
             <div className="space-y-2">
@@ -132,14 +101,17 @@ export default function IcebreakerForm() {
                 id="senderUrl"
                 type="url"
                 placeholder="https://linkedin.com/in/your-profile"
-                value={formData.senderUrl}
-                onChange={(e) => handleInputChange("senderUrl", e.target.value)}
-                className={`bg-slate-50 border-slate-200 focus:ring-blue-500 focus:border-blue-500 rounded-lg ${errors.senderUrl ? "border-red-300" : ""}`}
+                {...register("senderUrl", {
+                  validate: validateLinkedInUrl
+                })}
+                className={`bg-slate-50 border-slate-200 focus:ring-blue-500 focus:border-blue-500 rounded-lg ${
+                  errors.senderUrl ? "border-red-300" : ""
+                }`}
               />
               {errors.senderUrl && (
                 <div className="flex items-center gap-1 text-sm text-red-600">
                   <AlertCircle className="h-4 w-4" />
-                  {errors.senderUrl}
+                  {errors.senderUrl.message}
                 </div>
               )}
             </div>
@@ -153,14 +125,17 @@ export default function IcebreakerForm() {
                 id="receiverUrl"
                 type="url"
                 placeholder="https://linkedin.com/in/recipient-profile"
-                value={formData.receiverUrl}
-                onChange={(e) => handleInputChange("receiverUrl", e.target.value)}
-                className={`bg-slate-50 border-slate-200 focus:ring-blue-500 focus:border-blue-500 rounded-lg ${errors.receiverUrl ? "border-red-300" : ""}`}
+                {...register("receiverUrl", {
+                  validate: validateLinkedInUrl
+                })}
+                className={`bg-slate-50 border-slate-200 focus:ring-blue-500 focus:border-blue-500 rounded-lg ${
+                  errors.receiverUrl ? "border-red-300" : ""
+                }`}
               />
               {errors.receiverUrl && (
                 <div className="flex items-center gap-1 text-sm text-red-600">
                   <AlertCircle className="h-4 w-4" />
-                  {errors.receiverUrl}
+                  {errors.receiverUrl.message}
                 </div>
               )}
             </div>
@@ -174,8 +149,7 @@ export default function IcebreakerForm() {
             <Textarea
               id="problem"
               placeholder="Describe the challenge or pain point you can help address..."
-              value={formData.problem}
-              onChange={(e) => handleInputChange("problem", e.target.value)}
+              {...register("problem")}
               className="bg-slate-50 border-slate-200 focus:ring-blue-500 focus:border-blue-500 rounded-lg min-h-[100px] resize-none"
               rows={4}
             />
@@ -192,15 +166,22 @@ export default function IcebreakerForm() {
             <Textarea
               id="proposal"
               placeholder="Describe your solution, what you're offering, or your networking objective..."
-              value={formData.proposal}
-              onChange={(e) => handleInputChange("proposal", e.target.value)}
-              className={`bg-slate-50 border-slate-200 focus:ring-blue-500 focus:border-blue-500 rounded-lg min-h-[120px] resize-none ${errors.proposal ? "border-red-300" : ""}`}
+              {...register("proposal", {
+                required: "Proposal, solution, or objective is required",
+                minLength: {
+                  value: 10,
+                  message: "Please provide a more detailed proposal (at least 10 characters)"
+                }
+              })}
+              className={`bg-slate-50 border-slate-200 focus:ring-blue-500 focus:border-blue-500 rounded-lg min-h-[120px] resize-none ${
+                errors.proposal ? "border-red-300" : ""
+              }`}
               rows={5}
             />
             {errors.proposal && (
               <div className="flex items-center gap-1 text-sm text-red-600">
                 <AlertCircle className="h-4 w-4" />
-                {errors.proposal}
+                {errors.proposal.message}
               </div>
             )}
             <p className="text-xs text-slate-500">
@@ -213,7 +194,10 @@ export default function IcebreakerForm() {
             <Label htmlFor="writingStyle" className="text-sm font-semibold text-slate-700">
               Writing Style (Optional)
             </Label>
-            <Select value={formData.writingStyle} onValueChange={(value) => handleInputChange("writingStyle", value)}>
+            <Select 
+              value={writingStyleValue} 
+              onValueChange={(value) => setValue("writingStyle", value)}
+            >
               <SelectTrigger className="bg-slate-50 border-slate-200 focus:ring-blue-500 focus:border-blue-500 rounded-lg">
                 <SelectValue placeholder="Choose a writing style..." />
               </SelectTrigger>
@@ -231,12 +215,26 @@ export default function IcebreakerForm() {
             </p>
           </div>
 
+          {/* Success/Error Message */}
+          {submitMessage && (
+            <div className={`p-4 rounded-lg border ${
+              submitMessage.includes('successfully') 
+                ? 'bg-green-50 text-green-700 border-green-200' 
+                : 'bg-red-50 text-red-700 border-red-200'
+            }`}>
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-4 w-4" />
+                {submitMessage}
+              </div>
+            </div>
+          )}
+
           {/* Submit Button */}
           <div className="pt-4">
             <Button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-xl transition-colors duration-200"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-xl transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? (
                 <div className="flex items-center gap-2">
