@@ -17,7 +17,7 @@ interface IcebreakerRequest {
     private baseUrl: string
   
     constructor() {
-      this.baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+      this.baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080/api'
     }
   
     async generateIcebreaker(data: IcebreakerRequest): Promise<IcebreakerResponse> {
@@ -28,6 +28,7 @@ interface IcebreakerRequest {
         },
         body: JSON.stringify(data),
       })
+      console.log('API response status:', response.status)
   
       if (!response.ok) {
         const error = await response.json().catch(() => ({}))

@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { LinkedInProfile } from '../models/Profile';
 import { LinkedInPost } from '../models/Post';
 import { fetchLinkedInProfile, fetchLinkedInPosts, extractLinkedInUsername } from '../services/linkedinService';
+import { callOpenAI } from '../services/openAIService';
 
 // A helper function to transform raw JSON into our class instances
 function transformProfileData(data: any): LinkedInProfile {
@@ -26,6 +27,7 @@ function transformProfileData(data: any): LinkedInProfile {
 
 // Main function to handle the API request
 export const generateIcebreaker = async (req: Request, res: Response): Promise<void> => {
+  console.log("Entered generateIcebreaker function");
   const { senderUrl, receiverUrl, proposal } = req.body;
 
   if (!senderUrl || !receiverUrl || !proposal) {
@@ -82,12 +84,10 @@ export const generateIcebreaker = async (req: Request, res: Response): Promise<v
     openAIPrompt += `\n\n**Objective:** ${proposal}`;
     openAIPrompt += `\n\nGenerate a compelling message to start the conversation.`;
 
-    // Assume callOpenAI function exists in a separate service file
-    // const openaiResponse = await callOpenAI(openAIPrompt);
-    // res.json({ message: openaiResponse });
+    console.log("Generated OpenAI Prompt:", openAIPrompt);
 
-    // For now, return the prepared prompt to show the logic is working
-    res.json({ message: openAIPrompt });
+    const openaiResponse = await callOpenAI(openAIPrompt);
+    res.json({ message: openaiResponse });
 
   } catch (error) {
     console.error("Error processing request:", error);
