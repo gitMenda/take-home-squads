@@ -25,8 +25,7 @@ function transformProfileData(data: any): LinkedInProfile {
   );
 }
 
-// Main function to handle the API request
-export const generateIcebreaker = async (req: Request, res: Response): Promise<void> => {
+export const generateIcebreaker = async (req: Request, res: Response): Promise<Response | void> => {
   console.log("Entered generateIcebreaker function with body:", req.body);
   const { senderUrl, receiverUrl, problem, proposal, writingStyle } = req.body;
 
@@ -35,52 +34,75 @@ export const generateIcebreaker = async (req: Request, res: Response): Promise<v
     return;
   }
 
+  const senderUsername = extractLinkedInUsername(senderUrl);
+  const receiverUsername = extractLinkedInUsername(receiverUrl);
+
+  if (!senderUsername || !receiverUsername) {
+    res.status(400).json({ error: 'Invalid LinkedIn URLs. Please provide valid LinkedIn profile URLs.' });
+    return;
+  }
+
+  // Use a single try/catch for unexpected errors
   try {
-    const senderUsername = extractLinkedInUsername(senderUrl);
-    const receiverUsername = extractLinkedInUsername(receiverUrl);
-
-    if (!senderUsername || !receiverUsername) {
-      res.status(400).json({ error: 'Invalid LinkedIn URLs. Please provide valid LinkedIn profile URLs.' });
-      return;
-    }
-
-    // Fetch data from external APIs (delegated to the service)
-    const [senderData, receiverData, senderPostsData, receiverPostsData] = await Promise.all([
+    // Use Promise.allSettled() to get results from all promises, regardless of success or failure
+    const results = await Promise.allSettled([
       fetchLinkedInProfile(senderUsername),
       fetchLinkedInProfile(receiverUsername),
       fetchLinkedInPosts(senderUsername),
       fetchLinkedInPosts(receiverUsername)
     ]);
 
-    // Instantiate data models and prepare the prompt
+    const [senderProfileResult, receiverProfileResult, senderPostsResult, receiverPostsResult] = results;
+
+    // Handle sender profile errors and return directly
+    if (senderProfileResult.status === 'rejected') {
+      console.error("Sender profile fetch failed:", senderProfileResult.reason);
+      if (senderProfileResult.reason.message.includes("Profile not found")) {
+        return res.status(404).json({
+          error: 'Sender profile not found',
+          message: `The sender's LinkedIn profile could not be found. Please check the URL and try again.`
+        });
+      }
+      return res.status(500).json({
+        error: 'Sender data fetch failed',
+        message: 'An unexpected error occurred while fetching the sender\'s profile.'
+      });
+    }
+
+    // Handle receiver profile errors and return directly
+    if (receiverProfileResult.status === 'rejected') {
+      console.error("Receiver profile fetch failed:", receiverProfileResult.reason);
+      if (receiverProfileResult.reason.message.includes("Profile not found")) {
+        return res.status(404).json({
+          error: 'Receiver profile not found',
+          message: `The receiver's LinkedIn profile could not be found. Please check the URL and try again.`
+        });
+      }
+      return res.status(500).json({
+        error: 'Receiver data fetch failed',
+        message: 'An unexpected error occurred while fetching the receiver\'s profile.'
+      });
+    }
+
+    // If we get here, both profiles were found successfully.
+    // Now you can safely access the data.
+    const senderData = senderProfileResult.value;
+    const receiverData = receiverProfileResult.value;
+
+    // Handle posts separately, as they are not critical for a basic response
+    const senderPostsData = senderPostsResult.status === 'fulfilled' ? senderPostsResult.value : null;
+    const receiverPostsData = receiverPostsResult.status === 'fulfilled' ? receiverPostsResult.value : null;
+
     const senderProfile = transformProfileData(senderData);
     const receiverProfile = transformProfileData(receiverData);
-    const senderPosts = senderPostsData.data.map(
-      (post: any) => new LinkedInPost(
-        post.text,
-        post.totalReactionCount,
-        post.likeCount,
-        post.commentsCount,
-        post.repostsCount,
-        post.postUrl,
-        post.postedDate,
-        post.author,
-        post.contentType
-      )
-    );
-    const receiverPosts = receiverPostsData.data.map(
-      (post: any) => new LinkedInPost(
-        post.text,
-        post.totalReactionCount,
-        post.likeCount,
-        post.commentsCount,
-        post.repostsCount,
-        post.postUrl,
-        post.postedDate,
-        post.author,
-        post.contentType
-      )
-    );
+
+    const senderPosts = senderPostsData?.data?.length > 0 ? senderPostsData.data.map(
+      (post: any) => new LinkedInPost(post.text, post.totalReactionCount, post.likeCount, post.commentsCount, post.repostsCount, post.postUrl, post.postedDate, post.author, post.contentType)
+    ) : [];
+
+    const receiverPosts = receiverPostsData?.data?.length > 0 ? receiverPostsData.data.map(
+      (post: any) => new LinkedInPost(post.text, post.totalReactionCount, post.likeCount, post.commentsCount, post.repostsCount, post.postUrl, post.postedDate, post.author, post.contentType)
+    ) : [];
 
     let openAIPrompt = `
     You are a highly skilled professional networking assistant specializing in generating compelling and human-like LinkedIn messages. Your goal is to craft three distinct icebreaker messages for a connection request. These messages must be genuine, non-salesy, and tailored specifically to the recipient.
@@ -104,17 +126,18 @@ export const generateIcebreaker = async (req: Request, res: Response): Promise<v
     - Headline: ${receiverProfile.headline}
     - Summary: ${receiverProfile.summary}
     - Recent Posts (for personalization cues):
-    ${receiverPosts.slice(0, 5).map((post: LinkedInPost, index: number) => `- Post ${index + 1}: "${post.text.substring(0, 200)}..." (Likes: ${post.likeCount})`).join('\n')}
+    ${receiverPosts.slice(0, 10).map((post: LinkedInPost, index: number) => `- Post ${index + 1}: "${post.text.substring(0, 200)}..." (Likes: ${post.likeCount})`).join('\n')}
     
     **Connection Objective:**
-    - The reason for connecting is: ${proposal}
+    - The objective of this connection is: ${proposal}. It is important that the messages align with this goal.
+    ${problem ? `- The sender specified this specific challenge: ${problem}.` : ''}
     ${writingStyle ? `- The desired writing style from the sender is also: ${writingStyle}.` : ''}
     
     **Output Format:**
     - Message 1: [Text of the first personalized message]
     - Message 2: [Text of the second personalized message]
     - Message 3: [Text of the third personalized message]
-    
+
     Respect the format strictly, as the output will be parsed programmatically. Do not add * or any other characters besides what the format specifies.
     `
 

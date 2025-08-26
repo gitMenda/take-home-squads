@@ -99,16 +99,20 @@ export default function IcebreakerForm() {
   
     try {
       const response = await apiService.generateIcebreaker(formData);
-
-      const generatedMessages = response.messages;
-  
-      // Update the state with the messages from the API
-      setGeneratedMessages(generatedMessages);
-  
+      setGeneratedMessages(response.messages);
     } catch (error) {
       console.error("Error generating icebreaker:", error);
-      alert("Failed to generate icebreaker message. Please try again.");
-      setGeneratedMessages([]); // Clear messages on error
+      
+      // This is the core logic for a nice error message
+      if (error instanceof Error) {
+        // The `error.message` will contain the specific reason from the backend
+        // e.g., "Profile not found for username: ... Reason: This profile can't be accessed"
+        alert(error.message); 
+      } else {
+        alert("Failed to generate icebreaker message. Please try again.");
+      }
+  
+      setGeneratedMessages([]);
     } finally {
       setIsLoading(false);
     }
