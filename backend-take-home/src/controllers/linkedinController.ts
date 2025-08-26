@@ -68,7 +68,7 @@ export const generateIcebreaker = async (req: Request, res: Response): Promise<v
       )
     );
 
-    let openAIPrompt = `Generate a professional and friendly icebreaker message from ${senderProfile.firstName} to ${receiverProfile.firstName}.`;
+    let openAIPrompt = `Generate THREE distinct icebreaker messages from ${senderProfile.firstName} to ${receiverProfile.firstName}.`;
     openAIPrompt += `\n\n**Sender's Information:**`;
     openAIPrompt += `\n- Name: ${senderProfile.firstName} ${senderProfile.lastName}`;
     openAIPrompt += `\n- Headline: ${senderProfile.headline}`;
@@ -83,11 +83,19 @@ export const generateIcebreaker = async (req: Request, res: Response): Promise<v
     });
     openAIPrompt += `\n\n**Objective:** ${proposal}`;
     openAIPrompt += `\n\nGenerate a compelling message to start the conversation.`;
+    openAIPrompt += `\n\n**Output Format:**`;
+    openAIPrompt += `\n- Message 1: [text of the first message]`;
+    openAIPrompt += `\n- Message 2: [text of the second message]`;
+    openAIPrompt += `\n- Message 3: [text of the third message]`;
 
     console.log("Generated OpenAI Prompt:", openAIPrompt);
 
-    const openaiResponse = await callOpenAI(openAIPrompt);
-    res.json({ message: openaiResponse });
+    const openaiResponseText = await callOpenAI(openAIPrompt);
+
+    // Parse the single string response into an array of messages
+    const messagesArray = openaiResponseText.split(/Message \d: /).filter(msg => msg.trim() !== '');
+
+    res.json({ messages: messagesArray });
 
   } catch (error) {
     console.error("Error processing request:", error);

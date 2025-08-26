@@ -8,7 +8,7 @@ interface IcebreakerRequest {
   }
   
   interface IcebreakerResponse {
-    message: string
+    messages: string[]
     id: string
     createdAt: string
   }
@@ -28,8 +28,7 @@ interface IcebreakerRequest {
         },
         body: JSON.stringify(data),
       })
-      console.log('API response status:', response.status)
-  
+ 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}))
         throw new Error(error.message || `HTTP error! status: ${response.status}`)
