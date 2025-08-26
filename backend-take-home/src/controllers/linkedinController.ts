@@ -69,6 +69,7 @@ export const generateIcebreaker = async (req: Request, res: Response): Promise<v
     );
 
     let openAIPrompt = `Generate THREE distinct icebreaker messages from ${senderProfile.firstName} to ${receiverProfile.firstName}.`;
+    openAIPrompt += `\nUse the language of the receiver's recent posts.`;
     openAIPrompt += `\n\n**Sender's Information:**`;
     openAIPrompt += `\n- Name: ${senderProfile.firstName} ${senderProfile.lastName}`;
     openAIPrompt += `\n- Headline: ${senderProfile.headline}`;
@@ -92,8 +93,12 @@ export const generateIcebreaker = async (req: Request, res: Response): Promise<v
 
     const openaiResponseText = await callOpenAI(openAIPrompt);
 
+    console.log("OpenAI Response Text:", openaiResponseText);
+
     // Parse the single string response into an array of messages
-    const messagesArray = openaiResponseText.split(/Message \d: /).filter(msg => msg.trim() !== '');
+    const messagesArray = openaiResponseText.split(/Message \d: /).filter(msg => msg.trim() !== '' && msg.trim() !== '-');
+
+    console.log("Parsed Messages Array:", messagesArray);
 
     res.json({ messages: messagesArray });
 
